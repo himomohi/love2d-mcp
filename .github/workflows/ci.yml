@@ -1,23 +1,72 @@
 name: CI
-
 on:
   push:
-    branches: [master, main]
   pull_request:
-
 permissions:
   contents: read
-
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  node:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            node: 22
+          - os: windows-latest
+            node: 22
+          - os: ubuntu-latest
+            node: 24
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          node-version: 22
-      - run: npm install --ignore-scripts --no-audit
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: ${{ matrix.node }}
+          package-manager-cache: false
+      - name: Install locked dependencies (bootstrap only when no lock exists)
+        shell: bash
+        run: |
+          if [ -f package-lock.json ]; then npm ci --ignore-scripts --no-audit; else npm install --ignore-scripts --no-audit; fi
       - run: npm run check
-      - run: npm run build
       - run: npm audit --omit=dev --audit-level=high
       - run: npm pack --dry-run
+      - if: matrix.os == 'ubuntu-latest' && matrix.node == 22
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dependency-lock
+          path: package-lock.json
+  love:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: Install LÖVE and Lua runtimes
+        run: sudo apt-get update -qq && sudo apt-get install -y love xvfb lua5.1 lua5.4 luajit lua-socket
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then npm ci --ignore-scripts --no-audit; else npm install --ignore-scripts --no-audit; fi
+      - run: npm run build
+      - run: lua5.1 tests/bridge.test.lua
+      - run: lua5.4 tests/bridge.test.lua
+      - run: luajit tests/bridge.test.lua
+      - run: node tests/e2e.mjs
+      - run: npm pack
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: love2d-tested-package
+          path: |
+            test-results/
+            love2d-mcp-*.tgz
+          if-no-files-found: error

@@ -1,0 +1,10 @@
+import { spawn } from 'node:child_process';
+import { loadEnvFile } from 'node:process';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+const root = fileURLToPath(new URL('../', import.meta.url));
+loadEnvFile(path.join(root, '.env'));
+const child = spawn(process.env.LOVE2D_EXECUTABLE || 'love', [path.resolve(process.argv[2] || path.join(root, 'game'))], { env: process.env, stdio: 'inherit', shell: false });
+child.on('error', error => { console.error('Could not launch LÖVE. Set LOVE2D_EXECUTABLE to its executable path.', error.message); process.exitCode = 1; });
+child.on('exit', code => { process.exitCode = code ?? 1; });
+for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => child.kill(signal));
