@@ -1,234 +1,149 @@
-# LÖVE2D MCP Server
+# love2d-mcp — hardened fork
 
-A Model Context Protocol (MCP) server that enables AI assistants to interact with running LÖVE2D games. This allows for real-time introspection, debugging, and manipulation of game state through natural language.
+A security-hardened Model Context Protocol bridge for inspecting and controlling a running **LÖVE2D** game from Codex, Claude, or another MCP client.
 
-## Overview
+This fork is based on `shayarnett/love2d-mcp` and keeps the original MIT license while replacing the risky open TCP + unrestricted Lua design with secure-by-default local development controls.
 
-This project bridges LÖVE2D games with MCP-compatible AI assistants, enabling:
+## What changed
 
-- **Real-time introspection**: Query game objects, positions, properties, and state
-- **Dynamic code execution**: Run Lua code directly in the game context
-- **AI-assisted debugging**: Let AI assistants analyze and manipulate your game
-- **Interactive development**: Modify game behavior without restarting
+| Area | Original | Hardened fork |
+|---|---|---|
+| TCP bind | all interfaces (`*`) | loopback only (`127.0.0.1`) |
+| Authentication | none | required 32+ character shared token |
+| `run_lua` | enabled | disabled by default |
+| Lua globals | entire `love` table | no `love/os/io/package/debug`; opt-in context only |
+| Mutations | arbitrary Lua | explicit game-defined setter/action callbacks |
+| Framing | assumes one TCP chunk = one JSON response | newline framing with partial-chunk handling |
+| Limits | none | request/response/client/rate/idle/serialization limits |
+| Validation | minimal | Zod MCP inputs + bridge-side validation |
+| Diagnostics | 3 tools | ping/status + read/mutate/action + optional Lua |
+| Tests | none | security/config/TCP framing tests |
+| MCP SDK | old v1 dependency | current `@modelcontextprotocol/sdk` v1.30.x |
 
-## Architecture
+## MCP tools
 
-```
-┌─────────────┐ stdio  ┌─────────────┐  TCP   ┌─────────────┐
-│ MCP Client  │◄──────►│  MCP Server │◄──────►│  LÖVE2D     │
-│ (Inspector) │        │ (TypeScript)│        │  Game (Lua) │
-└─────────────┘        └─────────────┘        └─────────────┘
-```
+- `ping` — verify the authenticated local bridge
+- `get_status` — security mode, capabilities, metadata, client count
+- `list_objects` — compact sanitized scene objects
+- `get_object` — sanitized object details
+- `set_object_property` — only through your allowlisted setter callback
+- `invoke_action` — only through your allowlisted action callback
+- `run_lua` — restricted sandbox; **off by default**
 
-- **MCP Server**: Node.js/TypeScript server communicating via stdio
-- **LÖVE2D Bridge**: Lua TCP server embedded in your game
-- **Communication**: JSON-RPC over TCP between server and game
+## Quick start
 
-## Installation
+### 1. Install
 
-### Prerequisites
-
-- Node.js 18+ and npm
-- LÖVE2D 11.0+ ([download here](https://love2d.org))
-- Git
-
-### Setup
-
-1. Clone the repository:
-```bash
-git clone https://github.com/shayarnett/love2d-mcp.git
-cd love2d-mcp
-```
-
-2. Install dependencies:
 ```bash
 npm install
-```
-
-3. Build the TypeScript server:
-```bash
 npm run build
 ```
 
-## Quick Start
-
-### 1. Start the Example Game
+### 2. Generate one token
 
 ```bash
-love game/
+openssl rand -hex 32
 ```
 
-You should see a window with 5 bouncing balls. The game starts a TCP server on port 12345.
+Set the same value as `LOVE2D_MCP_TOKEN` for both Node and the game process.
 
-### 2. Connect with MCP Inspector
+### 3. Add the bridge to your LÖVE2D project
 
-In a new terminal:
-
-```bash
-npx @modelcontextprotocol/inspector node build/index.js
-```
-
-This opens the MCP Inspector in your browser where you can interact with the game.
-
-### 3. Try Some Commands
-
-**List all objects:**
-- Select the `list_objects` tool
-- Execute it to see all game objects
-
-**Get object details:**
-- Select the `get_object` tool
-- Enter an object ID from the list (e.g., `ball_1`)
-- View detailed properties
-
-**Run custom Lua code:**
-- Select the `run_lua` tool
-- Try this code to count purple balls:
+Copy `game/mcp_bridge.lua` into your project. Wire it from `main.lua`:
 
 ```lua
-local count = 0
-for id, obj in pairs(objects) do
-  if obj.type == "ball" then
-    if obj.b > 0.5 and obj.r > 0.5 and obj.g < 0.5 then
-      count = count + 1
-    end
-  end
-end
-return count
-```
-
-## Available MCP Tools
-
-### `list_objects`
-
-Lists all objects in the current game scene.
-
-**Parameters:** None
-
-**Returns:** Array of objects with `id`, `type`, `x`, and `y` properties.
-
-### `get_object`
-
-Get detailed information about a specific object.
-
-**Parameters:**
-- `id` (string): The object ID
-
-**Returns:** Complete object data including all properties.
-
-### `run_lua`
-
-Execute arbitrary Lua code in the game context with access to game objects.
-
-**Parameters:**
-- `code` (string): Lua code to execute
-
-**Returns:** Result of the code execution (string or JSON-encoded table).
-
-**Available in code context:**
-- `objects`: Table of all game objects
-- `love`: LÖVE2D API
-- Standard Lua functions and libraries
-
-## Integrating with Your Game
-
-To add MCP support to your own LÖVE2D game:
-
-1. Copy `game/mcp_bridge.lua` to your game directory
-
-2. In your `main.lua`:
-
-```lua
-local mcp_bridge = require("mcp_bridge")
+local mcp = require("mcp_bridge")
 
 function love.load()
-    -- Initialize MCP bridge on port 12345
-    mcp_bridge.init(12345)
-
-    -- Provide access to your game objects
-    mcp_bridge.setObjectGetter(function()
-        return your_game_objects_table
+    mcp.setObjectGetter(function()
+        return gameObjects
     end)
+
+    mcp.setObjectSetter(function(id, property, value)
+        local obj = gameObjects[id]
+        if not obj then return false end
+        local allowed = { x = true, y = true, health = true }
+        if not allowed[property] then return false end
+        obj[property] = value
+        return { updated = true }
+    end)
+
+    mcp.setActionHandler(function(action, params)
+        if action == "restart_level" then
+            restartLevel()
+            return { restarted = true }
+        end
+        return false
+    end)
+
+    mcp.init({ port = 12345 })
 end
 
 function love.update(dt)
-    -- Call this every frame to handle MCP commands
-    mcp_bridge.update()
-
-    -- Your game logic here
+    mcp.update()
 end
 
 function love.quit()
-    mcp_bridge.shutdown()
+    mcp.shutdown()
 end
 ```
 
-3. Start your game and connect via MCP Inspector
+`mcp.init()` reads `LOVE2D_MCP_TOKEN` from the environment and refuses to start without a strong token.
+
+### 4. Configure your MCP client
+
+Example configuration:
+
+```json
+{
+  "mcpServers": {
+    "love2d": {
+      "command": "node",
+      "args": ["/absolute/path/to/love2d-mcp/build/index.js"],
+      "env": {
+        "LOVE2D_MCP_TOKEN": "your-random-token",
+        "LOVE2D_MCP_HOST": "127.0.0.1",
+        "LOVE2D_MCP_PORT": "12345"
+      }
+    }
+  }
+}
+```
+
+## Optional restricted `run_lua`
+
+If you truly need Lua execution, enable it explicitly:
+
+```lua
+mcp.setLuaContextProvider(function()
+    return {
+        player = gameObjects.player,
+        debug_flags = debugFlags,
+    }
+end)
+
+mcp.init({
+    port = 12345,
+    allow_run_lua = true,
+})
+```
+
+Executed code receives this as `context`. It does **not** receive the global `love`, `os`, `io`, `package`, or `debug` tables. The bridge also enforces an instruction budget so an accidental infinite Lua loop is interrupted instead of hanging the game indefinitely.
 
 ## Development
 
-### Watch Mode
-
-For development with auto-rebuild:
-
 ```bash
-npm run dev
+npm test
+npm run typecheck
+npm run build
 ```
 
-### Project Structure
+## Security notes
 
-```
-love2d-mcp/
-├── src/
-│   └── index.ts          # MCP server implementation
-├── game/
-│   ├── main.lua          # Example LÖVE2D game
-│   └── mcp_bridge.lua    # TCP bridge module
-├── build/                # Compiled TypeScript
-├── package.json
-├── tsconfig.json
-└── README.md
-```
+This is still a privileged developer interface. Keep it local, keep the token secret, leave `run_lua` off unless required, and never ship the bridge enabled in a production game build.
 
-## Use Cases
-
-- **Debugging**: Query game state without adding debug UI
-- **Testing**: Automate game testing through AI
-- **Prototyping**: Quickly test ideas by running Lua snippets
-- **Learning**: Explore LÖVE2D by asking AI to analyze your game
-- **AI-assisted development**: Let AI help build game features
-
-## Troubleshooting
-
-### Game won't start
-- Ensure LÖVE2D is installed: `love --version`
-- Check for syntax errors in Lua files
-
-### MCP connection fails
-- Verify the game is running first
-- Check port 12345 isn't already in use
-- Look for "MCP Bridge listening" message in game console
-
-### Inspector shows errors
-- Rebuild the TypeScript: `npm run build`
-- Check Node.js version: `node --version` (requires 18+)
-
-## Contributing
-
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+See [`SECURITY.md`](SECURITY.md) for the threat model and hardening details.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
-
-## Acknowledgments
-
-- Built with the [Model Context Protocol](https://modelcontextprotocol.io/)
-- Powered by [LÖVE2D](https://love2d.org/)
-- Inspired by the need for better game development tools
-
-## Links
-
-- [MCP Documentation](https://modelcontextprotocol.io/)
-- [LÖVE2D Documentation](https://love2d.org/wiki/)
-- [Report Issues](https://github.com/shayarnett/love2d-mcp/issues)
+MIT. Original project copyright and license are preserved in `LICENSE`.

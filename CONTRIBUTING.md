@@ -1,184 +1,45 @@
-# Contributing to LÖVE2D MCP Server
+# Contributing
 
-Thank you for your interest in contributing! This document provides guidelines for contributing to the project.
+Contributions are welcome. This fork is secure-by-default: changes must not weaken loopback binding, authentication, input validation, serialization limits, or the default-disabled `run_lua` policy.
 
-## Getting Started
+## Setup
 
-1. Fork the repository on GitHub
-2. Clone your fork locally:
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/love2d-mcp.git
-   cd love2d-mcp
-   ```
-3. Install dependencies:
-   ```bash
-   npm install
-   ```
-4. Create a branch for your changes:
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
+```bash
+npm install
+npm run check
+npm run build
+```
 
-## Development Workflow
+Run the example game with the same `LOVE2D_MCP_TOKEN` used by the MCP server.
 
-### Running in Development Mode
+## Security invariants
 
-1. Start TypeScript watch mode:
-   ```bash
-   npm run dev
-   ```
+A pull request must preserve these rules unless it explicitly documents and justifies a safer replacement:
 
-2. In another terminal, start the test game:
-   ```bash
-   love game/
-   ```
+- TCP bridge binds to loopback only.
+- A strong shared token is required.
+- Every response must correlate to a request ID.
+- `run_lua` remains disabled by default.
+- Restricted Lua must not expose `love`, `os`, `io`, `package`, or `debug`.
+- Optional Lua execution must retain an execution budget.
+- Mutations go through game-defined allowlisted callbacks.
+- Request, response, serialization, client, idle, and rate limits remain bounded.
+- New MCP inputs are validated on both the Node and bridge sides where applicable.
 
-3. Test with MCP Inspector:
-   ```bash
-   npx @modelcontextprotocol/inspector node build/index.js
-   ```
+## Tests
 
-### Making Changes
+Before opening a PR:
 
-#### TypeScript/MCP Server Changes
+```bash
+npm run check
+npm run build
+npm pack --dry-run
+```
 
-- Server code is in `src/index.ts`
-- Follow TypeScript best practices
-- Ensure proper error handling for TCP connections
-- Test with the example game after changes
+Add regression tests for protocol framing, authentication, validation, or security-sensitive behavior you change. If you modify `game/mcp_bridge.lua`, add a static or integration regression test when practical.
 
-#### Lua Bridge Changes
+## Pull requests
 
-- Bridge code is in `game/mcp_bridge.lua`
-- Keep the API simple and well-documented
-- Ensure non-blocking socket operations
-- Test JSON encoding/decoding thoroughly
+Keep PRs focused, describe any security impact, and mention how you tested the change. Do not commit real tokens, secrets, generated build output, or `node_modules`.
 
-#### Example Game Changes
-
-- Game code is in `game/main.lua`
-- Keep it simple and illustrative
-- Demonstrate MCP capabilities clearly
-
-## Code Style
-
-### TypeScript
-
-- Use TypeScript strict mode
-- Prefer `async/await` over callbacks
-- Add JSDoc comments for public APIs
-- Follow existing formatting
-
-### Lua
-
-- Use 4 spaces for indentation
-- Use `snake_case` for functions and variables
-- Add comments for complex logic
-- Keep functions focused and small
-
-## Testing
-
-### Manual Testing Checklist
-
-Before submitting a PR, verify:
-
-- [ ] Game starts without errors
-- [ ] MCP server connects to game successfully
-- [ ] `list_objects` returns correct data
-- [ ] `get_object` retrieves object details
-- [ ] `run_lua` executes code correctly
-- [ ] Error handling works (try invalid commands)
-- [ ] Game and server shut down cleanly
-
-### Testing New Features
-
-- Add example usage in PR description
-- Update documentation if needed
-- Test edge cases and error conditions
-
-## Submitting Changes
-
-1. Commit your changes with clear messages:
-   ```bash
-   git commit -m "Add feature: brief description"
-   ```
-
-2. Push to your fork:
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-
-3. Open a Pull Request on GitHub with:
-   - Clear description of changes
-   - Motivation for the changes
-   - Testing performed
-   - Any breaking changes
-
-## Pull Request Guidelines
-
-### Good PR Practices
-
-- Keep PRs focused on a single feature or fix
-- Write clear commit messages
-- Update documentation for user-facing changes
-- Respond to review feedback promptly
-- Ensure your branch is up to date with main
-
-### PR Title Format
-
-Use conventional commits style:
-- `feat: Add new MCP tool for X`
-- `fix: Resolve connection issue when Y`
-- `docs: Update README with Z`
-- `refactor: Improve error handling in W`
-
-## Areas for Contribution
-
-### High Priority
-
-- **Additional MCP tools**: New ways to interact with games
-- **Better error messages**: Improve debugging experience
-- **Performance optimization**: Reduce latency and overhead
-- **Documentation**: Examples, tutorials, API docs
-
-### Feature Ideas
-
-- Support for multiple game instances
-- WebSocket transport option
-- Game state snapshots/restore
-- Real-time change watching
-- Visualization tools
-- Testing framework integration
-
-### Known Issues
-
-Check the [Issues](https://github.com/shayarnett/love2d-mcp/issues) page for:
-- Bug reports
-- Feature requests
-- Good first issues (labeled `good-first-issue`)
-
-## Code of Conduct
-
-### Our Standards
-
-- Be respectful and inclusive
-- Welcome newcomers
-- Focus on constructive feedback
-- Help others learn
-
-### Unacceptable Behavior
-
-- Harassment or discrimination
-- Trolling or inflammatory comments
-- Publishing others' private information
-- Other unprofessional conduct
-
-## Questions?
-
-- Open a [Discussion](https://github.com/shayarnett/love2d-mcp/discussions)
-- Check existing [Issues](https://github.com/shayarnett/love2d-mcp/issues)
-- Review the [README](README.md) and documentation
-
-## License
-
-By contributing, you agree that your contributions will be licensed under the MIT License.
+All contributions are licensed under the repository's MIT License.
