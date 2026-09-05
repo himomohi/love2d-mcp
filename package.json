@@ -1,23 +1,31 @@
 {
   "name": "love2d-mcp",
-  "version": "1.0.0",
-  "description": "MCP server for LÖVE2D game development",
+  "version": "2.0.0",
+  "description": "Security-hardened MCP bridge for LÖVE2D game development",
   "type": "module",
   "main": "build/index.js",
+  "files": ["build", "game/mcp_bridge.lua", "README.md", "SECURITY.md", "LICENSE"],
+  "bin": {
+    "love2d-mcp": "build/index.js"
+  },
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "check": "npm run typecheck && npm test",
     "start": "node build/index.js"
   },
-  "keywords": ["mcp", "love2d", "game-development"],
-  "author": "",
+  "keywords": ["mcp", "love2d", "love", "game-development", "security", "codex"],
   "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.4",
-    "zod": "^3.23.8"
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "zod": "3.25.0"
   },
   "devDependencies": {
-    "@types/node": "^22.10.2",
-    "typescript": "^5.7.2"
+    "@types/node": "22.15.0",
+    "typescript": "5.8.3"
   }
 }

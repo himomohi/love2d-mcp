@@ -1,33 +1,37 @@
-# CLAUDE.md
+# Agent guidance
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## Project Overview
-
-This is an MCP (Model Context Protocol) server for LÖVE2D game development. MCP servers expose tools and resources that allow LLMs to interact with external systems.
+This repository is a security-hardened MCP bridge for LÖVE2D development.
 
 ## Architecture
 
-### MCP Server Implementation
-- The server exposes tools for interacting with a running LÖVE2D game instance
-- Communication happens via stdio (standard input/output) following the MCP protocol
-- Tools should enable querying game state, modifying entities, and executing Lua code in the LÖVE2D runtime
+- `src/index.ts` exposes MCP tools over stdio.
+- `src/love2d-client.ts` sends authenticated newline-delimited JSON requests to the local game bridge.
+- `game/mcp_bridge.lua` listens on loopback only and integrates with the running LÖVE2D game.
+- Game state mutation is routed through explicit callbacks rather than unrestricted table access.
 
-### LÖVE2D Integration
-- LÖVE2D uses Lua as its scripting language
-- The game engine provides callbacks like `love.load()`, `love.update(dt)`, `love.draw()`
-- Games are typically structured with main.lua as the entry point
-- Common modules: graphics, audio, physics, filesystem, keyboard, mouse
+## Security rules
 
-## Development Workflow
+Do not weaken these defaults:
 
-### Testing
-- MCP servers are typically tested using the MCP Inspector tool
-- LÖVE2D games can be run with the `love` command pointing to the game directory
-- Integration testing requires both the MCP server and a running LÖVE2D instance
+- loopback-only networking
+- mandatory shared-token authentication
+- request ID correlation
+- bounded request/response/serialization sizes
+- client, idle, and request-rate limits
+- `run_lua` disabled by default
+- no `love`, `os`, `io`, `package`, or `debug` in the optional Lua environment
+- instruction-budget guard for optional Lua execution
 
-### Key Considerations
-- The MCP server needs a way to communicate with the LÖVE2D process (socket, shared memory, or file-based communication)
-- Lua code execution should be sandboxed appropriately for security
-- State queries should be efficient to avoid impacting game performance
-- Tool responses should follow MCP protocol specifications
+Prefer adding a typed/allowlisted MCP tool or game action instead of expanding `run_lua`.
+
+## Validation
+
+Run:
+
+```bash
+npm run check
+npm run build
+npm pack --dry-run
+```
+
+Add regression tests for security-sensitive changes.
