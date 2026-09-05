@@ -29,18 +29,11 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           package-manager-cache: false
-      - name: Install locked dependencies (bootstrap only when no lock exists)
-        shell: bash
-        run: |
-          if [ -f package-lock.json ]; then npm ci --ignore-scripts --no-audit; else npm install --ignore-scripts --no-audit; fi
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --no-audit
       - run: npm run check
       - run: npm audit --omit=dev --audit-level=high
       - run: npm pack --dry-run
-      - if: matrix.os == 'ubuntu-latest' && matrix.node == 22
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: dependency-lock
-          path: package-lock.json
   love:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -54,9 +47,8 @@ jobs:
           package-manager-cache: false
       - name: Install LÖVE and Lua runtimes
         run: sudo apt-get update -qq && sudo apt-get install -y love xvfb lua5.1 lua5.4 luajit lua-socket
-      - name: Install dependencies
-        run: |
-          if [ -f package-lock.json ]; then npm ci --ignore-scripts --no-audit; else npm install --ignore-scripts --no-audit; fi
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --no-audit
       - run: npm run build
       - run: lua5.1 tests/bridge.test.lua
       - run: lua5.4 tests/bridge.test.lua
