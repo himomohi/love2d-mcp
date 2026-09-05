@@ -28,7 +28,7 @@ const propertySchema = z.object({
 });
 const actionSchema = z.object({
   action: z.string().min(1).max(128),
-  params: z.record(z.unknown()).optional().default({}),
+  params: z.record(z.string(), z.unknown()).optional().default({}),
 });
 const luaSchema = z.object({ code: z.string().min(1).max(64 * 1024) });
 
