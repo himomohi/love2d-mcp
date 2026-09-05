@@ -1,3 +1,11 @@
+-- In CI, report startup errors to stderr rather than waiting on an error-screen window.
+if os.getenv('LOVE2D_MCP_TEST_MODE') == 'true' then
+    function love.errorhandler(message)
+        io.stderr:write(tostring(message) .. "\n" .. debug.traceback() .. "\n")
+        io.stderr:flush()
+        return function() return 1 end
+    end
+end
 local mcp = require('mcp_bridge')
 local runtime = require('mcp_runtime').attach(mcp, { input = true, control = true, screenshots = true })
 local initial = { player = { id='player',type='player',x=320,y=300,health=100,speed=180 }, enemy_1 = { id='enemy_1',type='enemy',x=670,y=300,health=40 } }

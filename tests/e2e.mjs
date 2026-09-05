@@ -9,9 +9,9 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 const listener=net.createServer();await new Promise(r=>listener.listen(0,'127.0.0.1',r));const port=listener.address().port;await new Promise(r=>listener.close(r));
 const token=randomBytes(32).toString('hex');
-const env=Object.fromEntries(Object.entries({...process.env,LOVE2D_MCP_TOKEN:token,LOVE2D_MCP_HOST:'127.0.0.1',LOVE2D_MCP_PORT:String(port),LOVE2D_MCP_ALLOW_RUN_LUA:'false'}).filter(([,v])=>v!==undefined));
+const env=Object.fromEntries(Object.entries({...process.env,LOVE2D_MCP_TOKEN:token,LOVE2D_MCP_HOST:'127.0.0.1',LOVE2D_MCP_PORT:String(port),LOVE2D_MCP_ALLOW_RUN_LUA:'false',LOVE2D_MCP_TEST_MODE:'true',LIBGL_ALWAYS_SOFTWARE:'1',SDL_VIDEODRIVER:'x11'}).filter(([,v])=>v!==undefined));
 const game=spawn('xvfb-run',['-a','love','game'],{env,detached:true,stdio:['ignore','pipe','pipe']});
-let gameLog='';game.stdout.on('data',b=>gameLog+=b);game.stderr.on('data',b=>gameLog+=b);
+let gameLog='';game.on('error',error=>{gameLog+=error.message;});game.stdout.on('data',b=>gameLog+=b);game.stderr.on('data',b=>gameLog+=b);
 const transport=new StdioClientTransport({command:process.execPath,args:['build/index.js'],env,stderr:'pipe'});
 const client=new Client({name:'love2d-e2e',version:'1'});
 let passed=0;const ok=(name)=>{passed++;console.log('PASS E2E: '+name);};
@@ -20,9 +20,9 @@ async function result(name,args={}){const r=await call(name,args);assert.notEqua
 try{
   await client.connect(transport);
   const {tools}=await client.listTools();assert.equal(tools.length,16);assert(!tools.some(t=>t.name==='run_lua'));ok('MCP initializes over stdio without requiring the game to be ready');
-  let ready=false;
-  for(let i=0;i<100;i++){const r=await call('ping');if(!r.isError){ready=true;break;}if(game.exitCode!==null)break;await sleep(100);}
-  assert(ready,gameLog);ok('real LÖVE TCP bridge authenticates');
+  let ready=false;let lastPing;
+  for(let i=0;i<100;i++){const r=await call('ping');lastPing=r;if(!r.isError){ready=true;break;}if(game.exitCode!==null)break;await sleep(100);}
+  assert(ready,gameLog+'\nLast ping: '+JSON.stringify(lastPing));ok('real LÖVE TCP bridge authenticates');
   const status=await result('get_status');assert.equal(status.bridge_version,'2.1.0');assert.equal(status.run_lua_enabled,false);ok('live capabilities and version');
   const actions=await result('list_actions');assert(actions.actions.some(a=>a.name==='damage_player'));ok('registered action discovery');
   assert.equal((await call('invoke_action',{action:'damage_player',params:{amount:-10}})).isError,true);ok('out-of-range action rejected');
